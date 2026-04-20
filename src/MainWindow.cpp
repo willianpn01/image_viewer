@@ -5,6 +5,7 @@
 #include "CompareView.hpp"
 #include "BatchExportDialog.hpp"
 #include "ExifPanel.hpp"
+#include <QMouseEvent>
 
 #include <QApplication>
 #include <QFileDialog>
@@ -46,7 +47,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     m_scrollArea = new QScrollArea(this);
     m_scrollArea->setWidget(m_imageLabel);
-    m_scrollArea->setWidgetResizable(true);
+    m_scrollArea->setWidgetResizable(false);
     m_scrollArea->setAlignment(Qt::AlignCenter);
     m_scrollArea->setBackgroundRole(QPalette::Dark);
 
@@ -65,8 +66,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     createToolBar();
     createStatusBarWidgets();
 
-    // Install pan handler on viewport + imageLabel (see PanHandler for rationale)
-    m_panHandler = new PanHandler(m_scrollArea, m_imageLabel, this);
+    m_scrollArea->viewport()->installEventFilter(this);
+    m_scrollArea->viewport()->setCursor(Qt::OpenHandCursor);
     connect(m_imageLabel, &ImageLabel::cropSelected, this, &MainWindow::performCrop);
 
     loadSettings();
@@ -206,7 +207,6 @@ void MainWindow::createActions() {
     m_actCrop->setCheckable(true);
     connect(m_actCrop, &QAction::toggled, this, [this](bool on) {
         m_imageLabel->setTool(on ? ImageLabel::Tool::Crop : ImageLabel::Tool::None);
-        m_panHandler->setCropActive(on);
         if (!on) m_actCrop->setChecked(false);
     });
     connect(m_imageLabel, &ImageLabel::cropSelected, this, [this](QRect) {
@@ -450,7 +450,7 @@ void MainWindow::displayImage() {
         m_zoom = (double)scaled.width() / pm.width();
         m_imageLabel->setDisplayZoom(m_zoom);
         m_imageLabel->setPixmap(scaled);
-        m_imageLabel->adjustSize();
+        m_imageLabel->setFixedSize(scaled.size());
     } else {
         if (m_zoom != 1.0) {
             pm = pm.scaled((int)std::round(pm.width()  * m_zoom),
@@ -460,7 +460,7 @@ void MainWindow::displayImage() {
         }
         m_imageLabel->setDisplayZoom(m_zoom);
         m_imageLabel->setPixmap(pm);
-        m_imageLabel->adjustSize();
+        m_imageLabel->setFixedSize(pm.size());
     }
     updateStatusBar();
 }
@@ -1007,4 +1007,42 @@ void MainWindow::keyPressEvent(QKeyEvent* e) {
         }
     }
     QMainWindow::keyPressEvent(e);
+}
+
+// ── Event filter (pan) ────────────────────────────────────────────────────────
+
+bool MainWindow::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == m_scrollArea->viewport()) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto* me = static_cast<QMouseEvent*>(event);
+            if (me->button() == Qt::LeftButton) {
+                m_panning = true;
+                m_panStart = me->globalPosition().toPoint();
+                m_scrollArea->viewport()->setCursor(Qt::ClosedHandCursor);
+                return true;
+            }
+        }
+        else if (event->type() == QEvent::MouseMove) {
+            auto* me = static_cast<QMouseEvent*>(event);
+            if (m_panning) {
+                QPoint delta = me->globalPosition().toPoint() - m_panStart;
+                m_panStart = me->globalPosition().toPoint();
+                m_scrollArea->horizontalScrollBar()->setValue(
+                    m_scrollArea->horizontalScrollBar()->value() - delta.x());
+                m_scrollArea->verticalScrollBar()->setValue(
+                    m_scrollArea->verticalScrollBar()->value() - delta.y());
+                return true;
+            }
+        }
+        else if (event->type() == QEvent::MouseButtonRelease) {
+            auto* me = static_cast<QMouseEvent*>(event);
+            if (me->button() == Qt::LeftButton && m_panning) {
+                m_panning = false;
+                m_scrollArea->viewport()->setCursor(Qt::OpenHandCursor);
+                return true;
+            }
+        }
+    }
+    return QMainWindow::eventFilter(obj, event);
 }

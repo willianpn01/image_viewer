@@ -21,7 +21,6 @@
 #include "ImageConvert.hpp"
 #include "CompareView.hpp"
 #include "ExifPanel.hpp"
-#include "PanHandler.hpp"
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -37,6 +36,7 @@ protected:
     void dropEvent(QDropEvent* e) override;
     void closeEvent(QCloseEvent* e) override;
     void keyPressEvent(QKeyEvent* e) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
 private slots:
     // ── File ──────────────────────────────────────────────────────────────────
@@ -164,8 +164,9 @@ private:
     ExifPanel*        m_exifPanel       = nullptr;
     QDockWidget*      m_exifDock        = nullptr;
 
-    // ── Pan handler ───────────────────────────────────────────────────────────
-    PanHandler*       m_panHandler      = nullptr;
+    // ── Pan state ─────────────────────────────────────────────────────────────
+    bool   m_panning  = false;
+    QPoint m_panStart;
 
     // ── Actions ───────────────────────────────────────────────────────────────
     QAction* m_actOpen        = nullptr;

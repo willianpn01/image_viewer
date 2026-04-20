@@ -21,7 +21,6 @@ set(SOURCES
     src/CompareView.cpp
     src/BatchExportDialog.cpp
     src/ExifPanel.cpp
-    src/PanHandler.cpp
     third_party/TinyEXIF.cpp
 )
 
