@@ -54,6 +54,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     createToolBar();
     createStatusBarWidgets();
 
+    m_imageLabel->setScrollArea(m_scrollArea);   // enable pan
     connect(m_imageLabel, &ImageLabel::cropSelected, this, &MainWindow::performCrop);
 
     loadSettings();
