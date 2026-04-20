@@ -10,6 +10,9 @@
 #include <QToolBar>
 #include <QSlider>
 #include <QStatusBar>
+#include <QTimer>
+#include <QComboBox>
+#include <QStringList>
 
 #include "ImageProcessor.hpp"   // defines CImgU8
 #include "UndoStack.hpp"
@@ -50,6 +53,12 @@ private slots:
     void onZoomOut();
     void onFitToWindow(bool checked);
     void onActualSize();
+
+    // ── Folder navigation / slideshow ─────────────────────────────────────────
+    void onPrevImage();
+    void onNextImage();
+    void onSlideshow(bool checked);
+    void onSlideshowTick();
 
     // ── Image / Adjustments ───────────────────────────────────────────────────
     void onBrightness();
@@ -111,6 +120,11 @@ private:
     // ── Recent files ──────────────────────────────────────────────────────────
     void rebuildRecentMenu();
 
+    // ── Folder navigation helpers ─────────────────────────────────────────────
+    void buildFolderList(const QString& dir);
+    void navigateToIndex(int idx);
+    int  currentFolderIndex() const;
+
     // ── Settings ──────────────────────────────────────────────────────────────
     void saveSettings();
     void loadSettings();
@@ -146,6 +160,9 @@ private:
     QAction* m_actFitWindow   = nullptr;
     QAction* m_actActualSize  = nullptr;
     QAction* m_actCrop        = nullptr;
+    QAction* m_actPrev        = nullptr;
+    QAction* m_actNext        = nullptr;
+    QAction* m_actSlideshow   = nullptr;
 
     // Image actions (enabled only when image loaded)
     QList<QAction*> m_imageActions;
@@ -153,6 +170,12 @@ private:
     // Recent files menu
     QMenu* m_recentMenu = nullptr;
     QList<QAction*> m_recentActions;
+
+    // ── Folder navigation / slideshow ─────────────────────────────────────────
+    QStringList m_folderImages;    // sorted image paths in current folder
+    QTimer*     m_slideshowTimer  = nullptr;
+    QComboBox*  m_slideshowCombo  = nullptr;  // interval selector in toolbar
+    QAction*    m_slideshowComboAction = nullptr;
 
     // Preferences (UndoStack depth)
     int m_maxUndoDepth = 20;

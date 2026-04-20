@@ -24,6 +24,7 @@
 #include <QFontMetrics>
 #include <QHeaderView>
 #include <QMenuBar>
+#include <QDir>
 #include <algorithm>
 #include <cmath>
 
@@ -148,6 +149,27 @@ void MainWindow::createActions() {
     m_actActualSize->setShortcut(Qt::CTRL | Qt::Key_0);
     connect(m_actActualSize, &QAction::triggered, this, &MainWindow::onActualSize);
 
+    // Folder navigation
+    m_actPrev = new QAction(QIcon::fromTheme("go-previous"), "&Previous Image", this);
+    m_actPrev->setShortcut(Qt::Key_Left);
+    connect(m_actPrev, &QAction::triggered, this, &MainWindow::onPrevImage);
+    m_imageActions.append(m_actPrev);
+
+    m_actNext = new QAction(QIcon::fromTheme("go-next"), "&Next Image", this);
+    m_actNext->setShortcut(Qt::Key_Right);
+    connect(m_actNext, &QAction::triggered, this, &MainWindow::onNextImage);
+    m_imageActions.append(m_actNext);
+
+    // Slideshow
+    m_actSlideshow = new QAction(QIcon::fromTheme("media-playback-start"), "S&lideshow", this);
+    m_actSlideshow->setShortcut(Qt::Key_F5);
+    m_actSlideshow->setCheckable(true);
+    connect(m_actSlideshow, &QAction::toggled, this, &MainWindow::onSlideshow);
+    m_imageActions.append(m_actSlideshow);
+
+    m_slideshowTimer = new QTimer(this);
+    connect(m_slideshowTimer, &QTimer::timeout, this, &MainWindow::onSlideshowTick);
+
     // Crop (toggle tool)
     m_actCrop = new QAction("&Crop", this);
     m_actCrop->setShortcut(Qt::Key_C);
@@ -191,6 +213,8 @@ void MainWindow::createMenus() {
     viewMenu->addAction(m_actZoomOut);
     viewMenu->addAction(m_actFitWindow);
     viewMenu->addAction(m_actActualSize);
+    viewMenu->addSeparator();
+    viewMenu->addAction(m_actSlideshow);
     viewMenu->addSeparator();
     viewMenu->addAction(m_fileDock->toggleViewAction());
     viewMenu->addAction(m_histDock->toggleViewAction());
@@ -295,6 +319,29 @@ void MainWindow::createToolBar() {
     addTbBtn("↺",  &MainWindow::onRotateCCW)->setToolTip("Rotate CCW");
     addTbBtn("↔",  &MainWindow::onFlipH)->setToolTip("Flip Horizontal");
     addTbBtn("↕",  &MainWindow::onFlipV)->setToolTip("Flip Vertical");
+
+    tb->addSeparator();
+    tb->addAction(m_actPrev);
+    tb->addAction(m_actNext);
+    tb->addAction(m_actSlideshow);
+
+    // Interval combo — visible only during slideshow
+    m_slideshowCombo = new QComboBox(tb);
+    m_slideshowCombo->addItem("2 s",  2000);
+    m_slideshowCombo->addItem("5 s",  5000);
+    m_slideshowCombo->addItem("10 s", 10000);
+    m_slideshowCombo->addItem("30 s", 30000);
+    m_slideshowCombo->setCurrentIndex(1); // 5 s default
+    m_slideshowCombo->setVisible(false);
+    m_slideshowCombo->setToolTip("Slideshow interval");
+    connect(m_slideshowCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+                if (m_slideshowTimer->isActive()) {
+                    int ms = m_slideshowCombo->currentData().toInt();
+                    m_slideshowTimer->setInterval(ms);
+                }
+            });
+    m_slideshowComboAction = tb->addWidget(m_slideshowCombo);
 }
 
 // ── Status bar ───────────────────────────────────────────────────────────────
@@ -341,6 +388,7 @@ void MainWindow::loadImage(const QString& path) {
     rebuildRecentMenu();
 
     setWindowTitle(QFileInfo(path).fileName() + " — CImg Viewer");
+    buildFolderList(QFileInfo(path).absolutePath());
 }
 
 void MainWindow::displayImage() {
@@ -393,7 +441,17 @@ void MainWindow::updateStatusBar() {
         .arg(m_currentImage.height())
         .arg(m_currentImage.spectrum()));
     m_statusZoom->setText(QString("  Zoom: %1%  ").arg((int)std::round(m_zoom * 100)));
-    m_statusPath->setText(m_currentFilePath);
+
+    // Slideshow indicator
+    if (m_slideshowTimer && m_slideshowTimer->isActive()) {
+        int idx   = currentFolderIndex();
+        int total = m_folderImages.size();
+        m_statusPath->setText(
+            QString("Slideshow — %1/%2  %3")
+                .arg(idx + 1).arg(total).arg(m_currentFilePath));
+    } else {
+        m_statusPath->setText(m_currentFilePath);
+    }
 }
 
 void MainWindow::updateActions() {
@@ -804,14 +862,80 @@ void MainWindow::loadSettings() {
     if (s.contains("windowState")) restoreState(s.value("windowState").toByteArray());
 }
 
+// ── Folder navigation / slideshow ─────────────────────────────────────────────
+
+void MainWindow::buildFolderList(const QString& dir) {
+    static const QStringList filters{"*.jpg","*.jpeg","*.png","*.bmp",
+                                     "*.tiff","*.tif","*.pbm","*.pgm","*.ppm"};
+    QDir d(dir);
+    QStringList entries = d.entryList(filters, QDir::Files, QDir::Name | QDir::IgnoreCase);
+    m_folderImages.clear();
+    for (const QString& e : entries)
+        m_folderImages << d.absoluteFilePath(e);
+}
+
+int MainWindow::currentFolderIndex() const {
+    if (m_currentFilePath.isEmpty()) return -1;
+    return m_folderImages.indexOf(m_currentFilePath);
+}
+
+void MainWindow::navigateToIndex(int idx) {
+    if (m_folderImages.isEmpty()) return;
+    // Wrap around
+    idx = ((idx % m_folderImages.size()) + m_folderImages.size()) % m_folderImages.size();
+    loadImage(m_folderImages[idx]);
+}
+
+void MainWindow::onPrevImage() {
+    int idx = currentFolderIndex();
+    if (idx < 0) return;
+    navigateToIndex(idx - 1);
+}
+
+void MainWindow::onNextImage() {
+    int idx = currentFolderIndex();
+    if (idx < 0) return;
+    navigateToIndex(idx + 1);
+}
+
+void MainWindow::onSlideshow(bool on) {
+    if (on) {
+        if (m_folderImages.isEmpty()) {
+            m_actSlideshow->setChecked(false);
+            return;
+        }
+        int ms = m_slideshowCombo->currentData().toInt();
+        m_slideshowTimer->start(ms);
+        m_slideshowCombo->setVisible(true);
+        m_actSlideshow->setIcon(QIcon::fromTheme("media-playback-stop"));
+        m_actSlideshow->setToolTip("Stop Slideshow (F5)");
+    } else {
+        m_slideshowTimer->stop();
+        m_slideshowCombo->setVisible(false);
+        m_actSlideshow->setIcon(QIcon::fromTheme("media-playback-start"));
+        m_actSlideshow->setToolTip("Start Slideshow (F5)");
+    }
+    updateStatusBar();
+}
+
+void MainWindow::onSlideshowTick() {
+    onNextImage();
+}
+
 // ── Keyboard ─────────────────────────────────────────────────────────────────
 
 void MainWindow::keyPressEvent(QKeyEvent* e) {
-    // Escape cancels the crop tool
-    if (e->key() == Qt::Key_Escape && m_actCrop->isChecked()) {
-        m_actCrop->setChecked(false);
-        m_imageLabel->setTool(ImageLabel::Tool::None);
-        return;
+    // Escape cancels the crop tool or stops slideshow
+    if (e->key() == Qt::Key_Escape) {
+        if (m_actCrop->isChecked()) {
+            m_actCrop->setChecked(false);
+            m_imageLabel->setTool(ImageLabel::Tool::None);
+            return;
+        }
+        if (m_actSlideshow->isChecked()) {
+            m_actSlideshow->setChecked(false);
+            return;
+        }
     }
     QMainWindow::keyPressEvent(e);
 }
