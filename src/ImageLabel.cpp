@@ -4,6 +4,14 @@
 #include <QScrollArea>
 #include <QScrollBar>
 
+// ROOT-CAUSE NOTE:
+// QLabel::mousePressEvent calls e->ignore() for pixmap-mode labels
+// (QLabel only accepts events when it has selectable text).  An ignored
+// press propagates to the parent viewport, which lets QAbstractScrollArea
+// steal the mouse grab — so mouseMoveEvent is never delivered to us during
+// a drag.  Fix: always call e->accept() and return ourselves when handling
+// crop or pan; never fall through to the base-class call in those paths.
+
 ImageLabel::ImageLabel(QWidget* parent) : QLabel(parent) {
     setMouseTracking(true);
     setCursor(Qt::OpenHandCursor);
@@ -33,22 +41,29 @@ void ImageLabel::enterEvent(QEnterEvent* e) {
 
 void ImageLabel::mousePressEvent(QMouseEvent* e) {
     if (e->button() == Qt::LeftButton) {
+
         if (m_tool == Tool::Crop) {
-            // Start rubber-band
+            // ── Crop: start rubber-band ────────────────────────────────────
             m_cropOrigin = e->pos();
             if (!m_rubberBand)
                 m_rubberBand = new QRubberBand(QRubberBand::Rectangle, this);
             m_rubberBand->setGeometry(QRect(m_cropOrigin, QSize()));
             m_rubberBand->show();
+            e->accept();   // keep mouse grab on this widget
+            return;        // ← do NOT call QLabel::mousePressEvent
+
         } else if (m_scrollArea) {
-            // Start pan
+            // ── Pan: capture origin + current scroll position ──────────────
             m_panning      = true;
             m_panOrigin    = e->globalPosition().toPoint();
             m_scrollHStart = m_scrollArea->horizontalScrollBar()->value();
             m_scrollVStart = m_scrollArea->verticalScrollBar()->value();
             setCursor(Qt::ClosedHandCursor);
+            e->accept();   // keep mouse grab — prevents viewport from stealing it
+            return;        // ← do NOT call QLabel::mousePressEvent
         }
     }
+    // For all other button combinations fall through to the base class.
     QLabel::mousePressEvent(e);
 }
 
@@ -57,11 +72,18 @@ void ImageLabel::mousePressEvent(QMouseEvent* e) {
 void ImageLabel::mouseMoveEvent(QMouseEvent* e) {
     if (m_tool == Tool::Crop && m_rubberBand && (e->buttons() & Qt::LeftButton)) {
         m_rubberBand->setGeometry(QRect(m_cropOrigin, e->pos()).normalized());
-    } else if (m_panning && m_scrollArea && (e->buttons() & Qt::LeftButton)) {
+        e->accept();
+        return;
+    }
+
+    if (m_panning && m_scrollArea && (e->buttons() & Qt::LeftButton)) {
         QPoint delta = e->globalPosition().toPoint() - m_panOrigin;
         m_scrollArea->horizontalScrollBar()->setValue(m_scrollHStart - delta.x());
         m_scrollArea->verticalScrollBar()->setValue(m_scrollVStart - delta.y());
+        e->accept();
+        return;
     }
+
     QLabel::mouseMoveEvent(e);
 }
 
@@ -69,6 +91,7 @@ void ImageLabel::mouseMoveEvent(QMouseEvent* e) {
 
 void ImageLabel::mouseReleaseEvent(QMouseEvent* e) {
     if (e->button() == Qt::LeftButton) {
+
         if (m_tool == Tool::Crop && m_rubberBand) {
             QRect displayRect = QRect(m_cropOrigin, e->pos()).normalized();
             m_rubberBand->hide();
@@ -88,9 +111,15 @@ void ImageLabel::mouseReleaseEvent(QMouseEvent* e) {
                     emit cropSelected(imgCoords);
                 }
             }
-        } else if (m_panning) {
+            e->accept();
+            return;
+        }
+
+        if (m_panning) {
             m_panning = false;
             setCursor(Qt::OpenHandCursor);
+            e->accept();
+            return;
         }
     }
     QLabel::mouseReleaseEvent(e);
