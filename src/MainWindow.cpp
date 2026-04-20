@@ -65,7 +65,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     createToolBar();
     createStatusBarWidgets();
 
-    m_imageLabel->setScrollArea(m_scrollArea);   // enable pan
+    // Install pan handler on viewport + imageLabel (see PanHandler for rationale)
+    m_panHandler = new PanHandler(m_scrollArea, m_imageLabel, this);
     connect(m_imageLabel, &ImageLabel::cropSelected, this, &MainWindow::performCrop);
 
     loadSettings();
@@ -205,6 +206,7 @@ void MainWindow::createActions() {
     m_actCrop->setCheckable(true);
     connect(m_actCrop, &QAction::toggled, this, [this](bool on) {
         m_imageLabel->setTool(on ? ImageLabel::Tool::Crop : ImageLabel::Tool::None);
+        m_panHandler->setCropActive(on);
         if (!on) m_actCrop->setChecked(false);
     });
     connect(m_imageLabel, &ImageLabel::cropSelected, this, [this](QRect) {

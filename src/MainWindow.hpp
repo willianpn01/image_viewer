@@ -21,6 +21,7 @@
 #include "ImageConvert.hpp"
 #include "CompareView.hpp"
 #include "ExifPanel.hpp"
+#include "PanHandler.hpp"
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -162,6 +163,9 @@ private:
     // ── EXIF panel ────────────────────────────────────────────────────────────
     ExifPanel*        m_exifPanel       = nullptr;
     QDockWidget*      m_exifDock        = nullptr;
+
+    // ── Pan handler ───────────────────────────────────────────────────────────
+    PanHandler*       m_panHandler      = nullptr;
 
     // ── Actions ───────────────────────────────────────────────────────────────
     QAction* m_actOpen        = nullptr;
