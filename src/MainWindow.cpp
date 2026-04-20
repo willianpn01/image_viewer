@@ -3,6 +3,7 @@
 #include "FileManager.hpp"
 #include "FilterDialog.hpp"
 #include "CompareView.hpp"
+#include "BatchExportDialog.hpp"
 
 #include <QApplication>
 #include <QFileDialog>
@@ -213,6 +214,11 @@ void MainWindow::createMenus() {
     m_recentMenu = fileMenu->addMenu("&Recent Files");
     rebuildRecentMenu();
 
+    fileMenu->addSeparator();
+    fileMenu->addAction("&Batch Export…", this, [this]() {
+        BatchExportDialog dlg(this);
+        dlg.exec();
+    });
     fileMenu->addSeparator();
     QAction* actExit = fileMenu->addAction("E&xit", this, &QWidget::close);
     actExit->setShortcut(QKeySequence::Quit);

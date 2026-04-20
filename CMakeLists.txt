@@ -19,6 +19,7 @@ set(SOURCES
     src/ImageLabel.cpp
     src/FilterDialog.cpp
     src/CompareView.cpp
+    src/BatchExportDialog.cpp
 )
 
 add_executable(CImgViewer ${SOURCES})
