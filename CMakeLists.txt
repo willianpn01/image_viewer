@@ -18,6 +18,7 @@ set(SOURCES
     src/HistogramWidget.cpp
     src/ImageLabel.cpp
     src/FilterDialog.cpp
+    src/CompareView.cpp
 )
 
 add_executable(CImgViewer ${SOURCES})

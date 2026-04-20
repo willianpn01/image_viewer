@@ -2,6 +2,7 @@
 #include "ImageProcessor.hpp"
 #include "FileManager.hpp"
 #include "FilterDialog.hpp"
+#include "CompareView.hpp"
 
 #include <QApplication>
 #include <QFileDialog>
@@ -46,6 +47,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_scrollArea->setWidgetResizable(true);
     m_scrollArea->setAlignment(Qt::AlignCenter);
     m_scrollArea->setBackgroundRole(QPalette::Dark);
+
+    // Compare view — hidden until compare mode is activated
+    m_compareView = new CompareView(this);
+    m_compareView->hide();
+
+    // Use the scroll area as the default central widget
     setCentralWidget(m_scrollArea);
 
     createFileBrowserDock();
@@ -170,6 +177,14 @@ void MainWindow::createActions() {
     m_slideshowTimer = new QTimer(this);
     connect(m_slideshowTimer, &QTimer::timeout, this, &MainWindow::onSlideshowTick);
 
+    // Compare mode
+    m_actCompare = new QAction("&Compare Mode", this);
+    m_actCompare->setShortcut(Qt::Key_V);
+    m_actCompare->setCheckable(true);
+    m_actCompare->setToolTip("Side-by-side comparison (V)");
+    connect(m_actCompare, &QAction::toggled, this, &MainWindow::onCompareMode);
+    m_imageActions.append(m_actCompare);
+
     // Crop (toggle tool)
     m_actCrop = new QAction("&Crop", this);
     m_actCrop->setShortcut(Qt::Key_C);
@@ -214,6 +229,7 @@ void MainWindow::createMenus() {
     viewMenu->addAction(m_actFitWindow);
     viewMenu->addAction(m_actActualSize);
     viewMenu->addSeparator();
+    viewMenu->addAction(m_actCompare);
     viewMenu->addAction(m_actSlideshow);
     viewMenu->addSeparator();
     viewMenu->addAction(m_fileDock->toggleViewAction());
@@ -320,6 +336,7 @@ void MainWindow::createToolBar() {
     addTbBtn("↔",  &MainWindow::onFlipH)->setToolTip("Flip Horizontal");
     addTbBtn("↕",  &MainWindow::onFlipV)->setToolTip("Flip Vertical");
 
+    tb->addAction(m_actCompare);
     tb->addSeparator();
     tb->addAction(m_actPrev);
     tb->addAction(m_actNext);
@@ -369,6 +386,7 @@ void MainWindow::loadImage(const QString& path) {
         return;
     }
     m_currentImage     = img;
+    m_originalImage    = img;   // freeze for compare view
     m_currentFilePath  = path;
 
     m_undoStack.clear();
@@ -427,6 +445,9 @@ void MainWindow::applyOperation(const QString& name, const CImgU8& result) {
     displayImage();
     updateHistogram();
     updateActions();
+    // Keep compare view in sync
+    if (m_actCompare->isChecked())
+        m_compareView->setEdited(QPixmap::fromImage(ImageConvert::toQImage(m_currentImage)));
 }
 
 void MainWindow::updateStatusBar() {
@@ -860,6 +881,28 @@ void MainWindow::loadSettings() {
     QSettings s("CImgViewer", "CImgViewer");
     if (s.contains("geometry"))    restoreGeometry(s.value("geometry").toByteArray());
     if (s.contains("windowState")) restoreState(s.value("windowState").toByteArray());
+}
+
+// ── Compare mode ──────────────────────────────────────────────────────────────
+
+void MainWindow::onCompareMode(bool on) {
+    if (on) {
+        if (m_currentImage.is_empty()) { m_actCompare->setChecked(false); return; }
+        // Populate both panels
+        QPixmap orig = QPixmap::fromImage(ImageConvert::toQImage(m_originalImage));
+        QPixmap edit = QPixmap::fromImage(ImageConvert::toQImage(m_currentImage));
+        m_compareView->setOriginal(orig);
+        m_compareView->setEdited(edit);
+        m_compareView->setZoom(m_zoom);
+        // Swap central widget
+        takeCentralWidget();  // detach scroll area without deleting
+        setCentralWidget(m_compareView);
+        m_compareView->show();
+    } else {
+        takeCentralWidget();  // detach compare view
+        setCentralWidget(m_scrollArea);
+        m_scrollArea->show();
+    }
 }
 
 // ── Folder navigation / slideshow ─────────────────────────────────────────────

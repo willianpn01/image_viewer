@@ -19,6 +19,7 @@
 #include "HistogramWidget.hpp"
 #include "ImageLabel.hpp"
 #include "ImageConvert.hpp"
+#include "CompareView.hpp"
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -59,6 +60,9 @@ private slots:
     void onNextImage();
     void onSlideshow(bool checked);
     void onSlideshowTick();
+
+    // ── Compare mode ──────────────────────────────────────────────────────────
+    void onCompareMode(bool checked);
 
     // ── Image / Adjustments ───────────────────────────────────────────────────
     void onBrightness();
@@ -147,6 +151,11 @@ private:
     QLabel*           m_statusImgInfo   = nullptr;
     QLabel*           m_statusZoom      = nullptr;
     QLabel*           m_statusPath      = nullptr;
+
+    // ── Compare mode ──────────────────────────────────────────────────────────
+    CompareView*      m_compareView     = nullptr;
+    CImgU8            m_originalImage;   // frozen at load time for compare
+    QAction*          m_actCompare      = nullptr;
 
     // ── Actions ───────────────────────────────────────────────────────────────
     QAction* m_actOpen        = nullptr;
