@@ -4,6 +4,7 @@
 #include "FilterDialog.hpp"
 #include "CompareView.hpp"
 #include "BatchExportDialog.hpp"
+#include "ExifPanel.hpp"
 
 #include <QApplication>
 #include <QFileDialog>
@@ -58,6 +59,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     createFileBrowserDock();
     createHistogramDock();
+    createExifDock();
     createActions();
     createMenus();
     createToolBar();
@@ -108,6 +110,17 @@ void MainWindow::createHistogramDock() {
     m_histWidget = new HistogramWidget(this);
     m_histDock->setWidget(m_histWidget);
     addDockWidget(Qt::RightDockWidgetArea, m_histDock);
+}
+
+// ── Dock: EXIF panel ─────────────────────────────────────────────────────────
+
+void MainWindow::createExifDock() {
+    m_exifDock = new QDockWidget("EXIF Info", this);
+    m_exifDock->setObjectName("exifDock");
+    m_exifPanel = new ExifPanel(this);
+    m_exifDock->setWidget(m_exifPanel);
+    addDockWidget(Qt::RightDockWidgetArea, m_exifDock);
+    m_exifDock->hide(); // hidden by default
 }
 
 // ── Actions ──────────────────────────────────────────────────────────────────
@@ -240,6 +253,10 @@ void MainWindow::createMenus() {
     viewMenu->addSeparator();
     viewMenu->addAction(m_fileDock->toggleViewAction());
     viewMenu->addAction(m_histDock->toggleViewAction());
+    QAction* exifAct = m_exifDock->toggleViewAction();
+    exifAct->setText("&EXIF Info");
+    exifAct->setShortcut(Qt::Key_E);
+    viewMenu->addAction(exifAct);
 
     // ── Image ─────────────────────────────────────────────────────────────────
     QMenu* imgMenu = menuBar()->addMenu("&Image");
@@ -407,6 +424,7 @@ void MainWindow::loadImage(const QString& path) {
     updateHistogram();
     updateActions();
     updateStatusBar();
+    m_exifPanel->loadFile(path);
 
     FileManager::addRecentFile(path);
     rebuildRecentMenu();

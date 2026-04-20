@@ -20,6 +20,8 @@ set(SOURCES
     src/FilterDialog.cpp
     src/CompareView.cpp
     src/BatchExportDialog.cpp
+    src/ExifPanel.cpp
+    third_party/TinyEXIF.cpp
 )
 
 add_executable(CImgViewer ${SOURCES})
@@ -38,6 +40,7 @@ endif()
 target_compile_definitions(CImgViewer PRIVATE
     cimg_display=0
     cimg_verbosity=0
+    TINYEXIF_NO_XMP_SUPPORT   # disable tinyxml2 dependency
 )
 
 # Suppress the flood of CImg warnings

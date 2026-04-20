@@ -20,6 +20,7 @@
 #include "ImageLabel.hpp"
 #include "ImageConvert.hpp"
 #include "CompareView.hpp"
+#include "ExifPanel.hpp"
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -110,6 +111,7 @@ private:
     void createToolBar();
     void createFileBrowserDock();
     void createHistogramDock();
+    void createExifDock();
     void createStatusBarWidgets();
 
     // ── Image helpers ─────────────────────────────────────────────────────────
@@ -156,6 +158,10 @@ private:
     CompareView*      m_compareView     = nullptr;
     CImgU8            m_originalImage;   // frozen at load time for compare
     QAction*          m_actCompare      = nullptr;
+
+    // ── EXIF panel ────────────────────────────────────────────────────────────
+    ExifPanel*        m_exifPanel       = nullptr;
+    QDockWidget*      m_exifDock        = nullptr;
 
     // ── Actions ───────────────────────────────────────────────────────────────
     QAction* m_actOpen        = nullptr;
