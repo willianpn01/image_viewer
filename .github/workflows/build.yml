@@ -24,6 +24,12 @@ jobs:
             libqt6svg6-dev libgl1-mesa-dev \
             libx11-dev
 
+      - name: Baixar CImg.h
+        run: |
+          mkdir -p third_party
+          curl -L https://github.com/GreycLab/CImg/raw/master/CImg.h \
+            -o third_party/CImg.h
+
       - name: Baixar ONNX Runtime
         run: |
           wget -q https://github.com/microsoft/onnxruntime/releases/download/v1.17.1/onnxruntime-linux-x64-1.17.1.tgz
@@ -58,8 +64,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake mingw-w64 wine64 \
-            qt6-base-dev qt6-tools-dev qt6-tools-dev-tools
+            cmake mingw-w64 \
+            qt6-base-dev qt6-tools-dev qt6-tools-dev-tools \
+            libqt6svg6-dev
+
+      - name: Baixar CImg.h
+        run: |
+          mkdir -p third_party
+          curl -L https://github.com/GreycLab/CImg/raw/master/CImg.h \
+            -o third_party/CImg.h
 
       - name: Instalar Qt6 para Windows
         run: |
@@ -74,34 +87,41 @@ jobs:
           wget -q https://github.com/microsoft/onnxruntime/releases/download/v1.17.1/onnxruntime-win-x64-1.17.1.zip
           unzip -q onnxruntime-win-x64-1.17.1.zip
 
-      - name: Configurar wrappers wine para ferramentas Qt
+      - name: Configurar wrappers nativos para ferramentas Qt
         run: |
+          # Usar ferramentas nativas do Linux (evita wine e problemas de path Z:/)
           chmod +x ~/qt6-windows/6.7.3/mingw_64/bin/*.exe
+          
+          MOC_NATIVE=$(which moc || find /usr/lib/qt6 -name moc | head -1)
+          RCC_NATIVE=$(which rcc || find /usr/lib/qt6 -name rcc | head -1)
+          UIC_NATIVE=$(which uic || find /usr/lib/qt6 -name uic | head -1)
+          
           for exe in moc rcc uic; do
             mv ~/qt6-windows/6.7.3/mingw_64/bin/${exe}.exe \
                ~/qt6-windows/6.7.3/mingw_64/bin/${exe}.exe.bak
-            echo '#!/bin/bash' > ~/qt6-windows/6.7.3/mingw_64/bin/${exe}.exe
-            echo "wine ~/qt6-windows/6.7.3/mingw_64/bin/${exe}.exe.bak \"\$@\"" \
-               >> ~/qt6-windows/6.7.3/mingw_64/bin/${exe}.exe
-            chmod +x ~/qt6-windows/6.7.3/mingw_64/bin/${exe}.exe
           done
+          
+          # Wrapper moc nativo
+          echo "#!/bin/bash" > ~/qt6-windows/6.7.3/mingw_64/bin/moc.exe
+          echo "exec $MOC_NATIVE \"\$@\"" >> ~/qt6-windows/6.7.3/mingw_64/bin/moc.exe
+          chmod +x ~/qt6-windows/6.7.3/mingw_64/bin/moc.exe
+          
+          # Wrapper rcc nativo
+          echo "#!/bin/bash" > ~/qt6-windows/6.7.3/mingw_64/bin/rcc.exe
+          echo "exec $RCC_NATIVE \"\$@\"" >> ~/qt6-windows/6.7.3/mingw_64/bin/rcc.exe
+          chmod +x ~/qt6-windows/6.7.3/mingw_64/bin/rcc.exe
+          
+          # Wrapper uic nativo
+          echo "#!/bin/bash" > ~/qt6-windows/6.7.3/mingw_64/bin/uic.exe
+          echo "exec $UIC_NATIVE \"\$@\"" >> ~/qt6-windows/6.7.3/mingw_64/bin/uic.exe
+          chmod +x ~/qt6-windows/6.7.3/mingw_64/bin/uic.exe
+          
+          # Verificar
+          ~/qt6-windows/6.7.3/mingw_64/bin/moc.exe --version
+          ~/qt6-windows/6.7.3/mingw_64/bin/rcc.exe --version
 
       - name: Build Windows
         run: |
-          mkdir -p cmake
-          cat > cmake/Toolchain-mingw64.cmake << 'TOOLCHAIN'
-          set(CMAKE_SYSTEM_NAME Windows)
-          set(CMAKE_SYSTEM_PROCESSOR x86_64)
-          set(CMAKE_C_COMPILER x86_64-w64-mingw32-gcc)
-          set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)
-          set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)
-          set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32 $ENV{HOME}/qt6-windows/6.7.3/mingw_64)
-          set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
-          set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
-          TOOLCHAIN
-
           cmake -B build-windows \
             -DCMAKE_TOOLCHAIN_FILE=cmake/Toolchain-mingw64.cmake \
             -DCMAKE_PREFIX_PATH=$HOME/qt6-windows/6.7.3/mingw_64 \
@@ -117,9 +137,8 @@ jobs:
           cp build-windows/CImgViewer.exe dist-windows/
           cp onnxruntime-win-x64-1.17.1/lib/onnxruntime*.dll dist-windows/
           cp ~/qt6-windows/6.7.3/mingw_64/bin/Qt6{Core,Gui,Widgets,Network,Svg,SvgWidgets,OpenGL,OpenGLWidgets,Xml,DBus}.dll dist-windows/
-          cp /usr/lib/gcc/x86_64-w64-mingw32/13-win32/libstdc++-6.dll dist-windows/ 2>/dev/null || \
-             find /usr -name "libstdc++-6.dll" -exec cp {} dist-windows/ \;
-          cp /usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll dist-windows/ 2>/dev/null || true
+          find /usr -name "libstdc++-6.dll" -exec cp {} dist-windows/ \; 2>/dev/null || true
+          find /usr -name "libwinpthread-1.dll" -exec cp {} dist-windows/ \; 2>/dev/null || true
           find /usr -name "libgcc_s_seh-1.dll" -exec cp {} dist-windows/ \; 2>/dev/null || true
           cp ~/qt6-windows/6.7.3/mingw_64/plugins/imageformats/*.dll dist-windows/imageformats/
           cp ~/qt6-windows/6.7.3/mingw_64/plugins/platforms/qwindows.dll dist-windows/platforms/
