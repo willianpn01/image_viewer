@@ -112,6 +112,8 @@ jobs:
     name: Publicar Release
     needs: [ build-windows ]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     if: github.event_name == 'release'
     steps:
       - uses: actions/download-artifact@v4
