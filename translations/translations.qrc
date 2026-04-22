@@ -1,0 +1,7 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+<qresource prefix="/translations">
+    <file>cimg-viewer_pt_BR.qm</file>
+    <file>cimg-viewer_en.qm</file>
+</qresource>
+</RCC>

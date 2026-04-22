@@ -39,6 +39,16 @@ public:
     static CImgU8 morphClose(const CImgU8& img, int radius);
     static CImgU8 morphGradient(const CImgU8& img, int radius);
 
+    // ── Non-linear diffusion (Perona-Malik, Cap. 5.4) ─────────────────────
+    static CImgU8 peronaMalikDiffusion(const CImgU8& img, int iterations, double kappa);
+
+    // ── LAB colour transfer (Reinhard et al. 2001) ────────────────────────
+    // Transfers the colour distribution of `reference` onto `src`.
+    // If `src` is grayscale, its L channel is preserved and a/b are taken
+    // from `reference`. intensity ∈ [0,1] blends result with original.
+    static CImgU8 labColorTransfer(const CImgU8& src, const CImgU8& reference,
+                                   float intensity = 1.0f);
+
     // ── Histogram utility ─────────────────────────────────────────────────
     // Returns one histogram per channel (1 for gray, 3 for RGB)
     static std::vector<std::vector<int>> computeHistograms(const CImgU8& img);

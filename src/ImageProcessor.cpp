@@ -290,6 +290,38 @@ CImgU8 ImageProcessor::morphGradient(const CImgU8& img, int radius) {
     return CImgU8(g);
 }
 
+// ── Non-linear diffusion (Perona-Malik) ──────────────────────────────────────
+
+CImgU8 ImageProcessor::peronaMalikDiffusion(const CImgU8& img, int iterations, double kappa) {
+    cimg_library::CImg<float> u(img);
+    const float k2  = (float)(kappa * kappa);
+    const float dt  = 0.25f;  // stability condition for 4-neighbour explicit scheme
+    const int   W   = u.width(), H = u.height(), C = u.spectrum();
+
+    for (int iter = 0; iter < iterations; iter++) {
+        cimg_library::CImg<float> prev = u;
+        for (int c = 0; c < C; c++) {
+            for (int y = 0; y < H; y++) {
+                for (int x = 0; x < W; x++) {
+                    float p  = prev(x, y, 0, c);
+                    float dN = (y > 0)     ? prev(x, y-1, 0, c) - p : 0.f;
+                    float dS = (y < H-1)   ? prev(x, y+1, 0, c) - p : 0.f;
+                    float dE = (x < W-1)   ? prev(x+1, y, 0, c) - p : 0.f;
+                    float dW = (x > 0)     ? prev(x-1, y, 0, c) - p : 0.f;
+                    // Perona-Malik conductance function g(s) = exp(-(s/kappa)^2)
+                    float cN = std::exp(-(dN*dN)/k2);
+                    float cS = std::exp(-(dS*dS)/k2);
+                    float cE = std::exp(-(dE*dE)/k2);
+                    float cW = std::exp(-(dW*dW)/k2);
+                    u(x, y, 0, c) = p + dt * (cN*dN + cS*dS + cE*dE + cW*dW);
+                }
+            }
+        }
+    }
+    u.cut(0, 255);
+    return CImgU8(u);
+}
+
 // ── Histogram utility ─────────────────────────────────────────────────────────
 
 std::vector<std::vector<int>> ImageProcessor::computeHistograms(const CImgU8& img) {
@@ -298,4 +330,89 @@ std::vector<std::vector<int>> ImageProcessor::computeHistograms(const CImgU8& im
     for (int c = 0; c < nc; ++c)
         cimg_forXY(img, x, y) hists[c][img(x, y, 0, c)]++;
     return hists;
+}
+
+// ── LAB colour transfer (Reinhard et al. 2001) ────────────────────────────────
+//
+// Algorithm:
+//  1. Convert source and reference to L*a*b* (CImg RGBtoLab: L∈[0,100], a/b∈[-128,127])
+//  2. Per-channel: result[c] = (src[c] - μ_src) / σ_src * σ_ref + μ_ref
+//  3. Blend with original via intensity parameter
+//  4. For grayscale source: preserve source L, transfer only a and b
+
+static void labStats(const cimg_library::CImg<float>& lab, int c,
+                     float& mean, float& stddev) {
+    double s = 0, s2 = 0;
+    const int N = lab.width() * lab.height();
+    cimg_forXY(lab, x, y) {
+        double v = lab(x, y, 0, c);
+        s  += v;
+        s2 += v * v;
+    }
+    mean   = (float)(s  / N);
+    stddev = (float)std::sqrt(std::max(0.0, s2 / N - (s / N) * (s / N)));
+    if (stddev < 1e-6f) stddev = 1e-6f;
+}
+
+CImgU8 ImageProcessor::labColorTransfer(const CImgU8& src, const CImgU8& reference,
+                                         float intensity) {
+    // Ensure RGB source (replicate grayscale to 3 channels)
+    cimg_library::CImg<float> srcRGB;
+    bool srcWasGray = (src.spectrum() == 1);
+    if (srcWasGray) {
+        srcRGB.assign(src.width(), src.height(), 1, 3);
+        cimg_forXY(src, x, y) {
+            float v = (float)src(x, y, 0, 0);
+            srcRGB(x, y, 0, 0) = srcRGB(x, y, 0, 1) = srcRGB(x, y, 0, 2) = v;
+        }
+    } else {
+        srcRGB = cimg_library::CImg<float>(src);
+    }
+
+    // Resize reference to match source
+    cimg_library::CImg<float> refRGB = cimg_library::CImg<float>(reference);
+    if (reference.spectrum() == 1) {
+        refRGB.assign(reference.width(), reference.height(), 1, 3);
+        cimg_forXY(reference, x, y) {
+            float v = (float)reference(x, y, 0, 0);
+            refRGB(x, y, 0, 0) = refRGB(x, y, 0, 1) = refRGB(x, y, 0, 2) = v;
+        }
+    }
+    refRGB.resize(src.width(), src.height(), 1, 3, 3); // bicubic
+
+    // Convert to Lab (CImg expects [0,255] RGB input)
+    cimg_library::CImg<float> srcLab = srcRGB.get_RGBtoLab();
+    cimg_library::CImg<float> refLab = refRGB.get_RGBtoLab();
+    cimg_library::CImg<float> outLab = srcLab;
+
+    // Transfer statistics for each channel
+    // For grayscale source: only transfer a (1) and b (2) channels
+    int startC = srcWasGray ? 1 : 0;
+    for (int c = startC; c < 3; ++c) {
+        float mean_src, std_src, mean_ref, std_ref;
+        labStats(srcLab, c, mean_src, std_src);
+        labStats(refLab, c, mean_ref, std_ref);
+
+        cimg_forXY(outLab, x, y) {
+            float orig     = srcLab(x, y, 0, c);
+            float transfer = (orig - mean_src) / std_src * std_ref + mean_ref;
+            outLab(x, y, 0, c) = orig + intensity * (transfer - orig);
+        }
+    }
+
+    cimg_library::CImg<float> resultRGB = outLab.get_LabtoRGB();
+    resultRGB.cut(0.f, 255.f);
+
+    // If source was grayscale, return 3-channel result; preserve original
+    // brightness via blend on L channel already handled above (startC=1).
+    CImgU8 result(resultRGB);
+
+    if (intensity < 1.0f && !srcWasGray) {
+        // Blend RGB result with original for non-grayscale sources
+        cimg_foroff(result, off)
+            result[off] = clamp8((int)((1.f - intensity) * src[off] +
+                                        intensity * result[off]));
+    }
+
+    return result;
 }

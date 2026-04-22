@@ -47,6 +47,9 @@ BatchExportDialog::BatchExportDialog(QWidget* parent) : QDialog(parent) {
     m_fmtCombo->addItem("PNG",  "png");
     m_fmtCombo->addItem("JPG",  "jpg");
     m_fmtCombo->addItem("BMP",  "bmp");
+    m_fmtCombo->addItem("TIFF", "tiff");
+    m_fmtCombo->addItem("WebP", "webp");
+    m_fmtCombo->addItem("TGA",  "tga");
     fmtForm->addRow("Format:", m_fmtCombo);
 
     // JPG quality row
@@ -60,7 +63,7 @@ BatchExportDialog::BatchExportDialog(QWidget* parent) : QDialog(parent) {
     m_jpgQLabel->setMinimumWidth(30);
     jpgL->addWidget(m_jpgQuality);
     jpgL->addWidget(m_jpgQLabel);
-    fmtForm->addRow("JPG Quality:", m_jpgRow);
+    fmtForm->addRow(tr("Quality:"), m_jpgRow);
     m_jpgRow->setVisible(false);
 
     mainLayout->addWidget(fmtGroup);
@@ -150,8 +153,9 @@ void BatchExportDialog::onBrowseOut() {
 }
 
 void BatchExportDialog::onFormatChanged(int) {
-    bool isJpg = (m_fmtCombo->currentData().toString() == "jpg");
-    m_jpgRow->setVisible(isJpg);
+    QString fmt = m_fmtCombo->currentData().toString();
+    // Quality slider applies to lossy formats (JPG and WebP)
+    m_jpgRow->setVisible(fmt == "jpg" || fmt == "webp");
 }
 
 void BatchExportDialog::setRunning(bool r) {
@@ -183,8 +187,7 @@ void BatchExportDialog::onStart() {
         return;
     }
 
-    static const QStringList filters{
-        "*.jpg","*.jpeg","*.png","*.bmp","*.tiff","*.tif","*.pbm","*.pgm","*.ppm"};
+    static const QStringList filters = FileManager::supportedExtensions();
     QDir inDir(inPath);
     QStringList files = inDir.entryList(filters, QDir::Files, QDir::Name);
 
@@ -194,7 +197,8 @@ void BatchExportDialog::onStart() {
     }
 
     QString ext  = m_fmtCombo->currentData().toString();
-    int quality  = (ext == "jpg") ? m_jpgQuality->value() : -1;
+    // Quality applies to JPG and WebP; -1 means Qt picks default for other formats
+    int quality = (ext == "jpg" || ext == "webp") ? m_jpgQuality->value() : -1;
     bool doResize = m_chkResize->isChecked();
     int  maxW     = m_resizeSpin->value();
     bool doGray   = m_chkGray->isChecked();
@@ -233,9 +237,17 @@ void BatchExportDialog::onStart() {
         QString baseName = QFileInfo(fname).completeBaseName();
         QString destPath = outDir.absoluteFilePath(baseName + "." + ext);
 
-        QImage qimg = ImageConvert::toQImage(img);
-        if (!qimg.save(destPath, ext.toUpper().toLatin1().constData(), quality))
-            ++failed;
+        // TGA: use CImg fallback (Qt has no TGA writer)
+        // All others: try Qt (handles PNG, JPG, TIFF, BMP, WebP if plugin present)
+        bool saved;
+        if (ext == "tga") {
+            QString saveErr;
+            saved = FileManager::saveImage(img, destPath, &saveErr);
+        } else {
+            QImage qimg = ImageConvert::toQImage(img);
+            saved = qimg.save(destPath, ext.toUpper().toLatin1().constData(), quality);
+        }
+        if (!saved) ++failed;
 
         ++processed;
         m_progress->setValue(processed);

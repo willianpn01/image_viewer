@@ -5,6 +5,7 @@
 #define cimg_display 0
 #include "CImg.h"
 #include <QImage>
+#include <QPainter>
 
 namespace ImageConvert {
 
@@ -21,7 +22,22 @@ inline QImage toQImage(const cimg_library::CImg<unsigned char>& img) {
         return q;
     }
 
-    // RGB (or more channels — use first 3)
+    if (img.spectrum() >= 4) {
+        // RGBA — Format_RGBA8888: byte order R,G,B,A in memory
+        QImage q(img.width(), img.height(), QImage::Format_RGBA8888);
+        for (int y = 0; y < img.height(); ++y) {
+            uchar* line = q.scanLine(y);
+            for (int x = 0; x < img.width(); ++x) {
+                line[x * 4 + 0] = img(x, y, 0, 0);  // R
+                line[x * 4 + 1] = img(x, y, 0, 1);  // G
+                line[x * 4 + 2] = img(x, y, 0, 2);  // B
+                line[x * 4 + 3] = img(x, y, 0, 3);  // A
+            }
+        }
+        return q;
+    }
+
+    // RGB
     QImage q(img.width(), img.height(), QImage::Format_RGB888);
     for (int y = 0; y < img.height(); ++y) {
         uchar* line = q.scanLine(y);
@@ -32,6 +48,39 @@ inline QImage toQImage(const cimg_library::CImg<unsigned char>& img) {
         }
     }
     return q;
+}
+
+// Composite an RGBA QImage over a standard white/grey checkerboard for display.
+// Returns an opaque RGB QImage (Format_RGB888) suitable for QLabel/QPixmap.
+// Uses straight-alpha (non-premultiplied) compositing to avoid halo artefacts.
+inline QImage compositeOnCheckerboard(const QImage& rgba, int tileSize = 12) {
+    if (!rgba.hasAlphaChannel()) return rgba;
+
+    // Work in ARGB32 (straight alpha) — avoids premultiplied rounding at borders
+    QImage src = rgba.convertToFormat(QImage::Format_ARGB32);
+    QImage out(src.size(), QImage::Format_RGB888);
+
+    // Standard Photoshop/GIMP checkerboard: white + light-grey tiles
+    const int L = 255, D = 191;   // #FFFFFF / #BFBFBF
+
+    for (int y = 0; y < out.height(); ++y) {
+        uchar* dstLine = out.scanLine(y);
+        const QRgb* srcLine = reinterpret_cast<const QRgb*>(src.constScanLine(y));
+        for (int x = 0; x < out.width(); ++x) {
+            // Checkerboard tile colour for this pixel
+            int bg = ((x / tileSize + y / tileSize) % 2 == 0) ? L : D;
+
+            QRgb px   = srcLine[x];
+            int  a    = qAlpha(px);
+            int  invA = 255 - a;
+
+            // Straight-alpha composite: out = src*a/255 + bg*(1-a/255)
+            dstLine[x * 3 + 0] = (unsigned char)((qRed(px)   * a + bg * invA) / 255);
+            dstLine[x * 3 + 1] = (unsigned char)((qGreen(px) * a + bg * invA) / 255);
+            dstLine[x * 3 + 2] = (unsigned char)((qBlue(px)  * a + bg * invA) / 255);
+        }
+    }
+    return out;
 }
 
 inline cimg_library::CImg<unsigned char> toCImg(const QImage& src) {

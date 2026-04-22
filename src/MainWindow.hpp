@@ -10,9 +10,14 @@
 #include <QToolBar>
 #include <QSlider>
 #include <QStatusBar>
+#include <QHBoxLayout>
+#include <QSpinBox>
+#include <QActionGroup>
 #include <QTimer>
 #include <QComboBox>
 #include <QStringList>
+#include <QListWidget>
+#include <QStandardPaths>
 
 #include "ImageProcessor.hpp"   // defines CImgU8
 #include "UndoStack.hpp"
@@ -21,6 +26,12 @@
 #include "ImageConvert.hpp"
 #include "CompareView.hpp"
 #include "ExifPanel.hpp"
+#include "SegmentTool.hpp"
+#include "AnnotationLayer.hpp"
+#include "AiTools.hpp"
+#include <vector>
+#include <memory>
+#include <functional>
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -81,6 +92,35 @@ private slots:
     void onSobel();
     void onCanny();
     void onEmboss();
+    void onNonLinearDiffusion();
+
+    // ── Tools ─────────────────────────────────────────────────────────────────
+    void onMagicSelectToggled(bool on);
+    void onMagicSelectClicked(QPoint imagePoint);
+    void onExportSelection();
+    void onThresholdChanged(int value);
+
+    // ── AI operations ─────────────────────────────────────────────────────────
+    void onAiRemoveBg();
+    void onAiSuperRes();
+    void onAiDetect();
+    void onAiStyleTransfer(const QString& styleId);
+    void onAiManageModels();
+
+    // ── Image / Colorize (LAB, no ONNX) ──────────────────────────────────────
+    void onColorizeLabTransfer();
+
+    // ── Annotations ───────────────────────────────────────────────────────────
+    void onAnnotateToggled(bool on);
+    void onAnnotatePress(QPointF pt);
+    void onAnnotateMove(QPointF pt);
+    void onAnnotateRelease(QPointF pt);
+    void onAnnotateUndo();
+    void onAnnotateRedo();
+    void onAnnotateColor();
+    void onSaveWithAnnotations();
+    void onSaveWithoutAnnotations();
+    void onSaveAnnotationsJson();
 
     // ── Image / Transform ─────────────────────────────────────────────────────
     void onRotateCW();
@@ -101,15 +141,27 @@ private slots:
     // ── Help ──────────────────────────────────────────────────────────────────
     void onKeyboardShortcuts();
     void onAbout();
+    void onOpenLogFile();
+    void onOpenLogFolder();
+
+    // ── Settings / Language ───────────────────────────────────────────────────
+    void onLanguagePtBr();
+    void onLanguageEn();
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     void onFileBrowserClicked(const QModelIndex& idx);
+
+    // ── File browser favorites ─────────────────────────────────────────────────
+    void onFavItemClicked(QListWidgetItem* item);
+    void onFavContextMenu(const QPoint& pos);
+    void onTreeContextMenu(const QPoint& pos);
 
 private:
     // ── Setup helpers ─────────────────────────────────────────────────────────
     void createActions();
     void createMenus();
     void createToolBar();
+    void createAnnotationToolBar();
     void createFileBrowserDock();
     void createHistogramDock();
     void createExifDock();
@@ -132,9 +184,23 @@ private:
     void navigateToIndex(int idx);
     int  currentFolderIndex() const;
 
+    // ── File browser helpers ──────────────────────────────────────────────────
+    void populateFavorites();
+    void navigateFileBrowserTo(const QString& dir);
+
     // ── Settings ──────────────────────────────────────────────────────────────
     void saveSettings();
     void loadSettings();
+
+    // ── Selection helpers ─────────────────────────────────────────────────────
+    void clearSelection();
+    void updateSelectionStatus();
+
+    // ── Annotation helpers ────────────────────────────────────────────────────
+    void updateAnnotationOverlay();
+    void updateAnnotationActions();
+    void loadAnnotationsForImage(const QString& imagePath);
+    QString annotationJsonPath(const QString& imagePath) const;
 
     // ── Data ──────────────────────────────────────────────────────────────────
     CImgU8      m_currentImage;
@@ -151,9 +217,11 @@ private:
     QDockWidget*      m_histDock        = nullptr;
     QTreeView*        m_fileTree        = nullptr;
     QFileSystemModel* m_fsModel         = nullptr;
+    QListWidget*      m_favList         = nullptr;
     QLabel*           m_statusImgInfo   = nullptr;
     QLabel*           m_statusZoom      = nullptr;
     QLabel*           m_statusPath      = nullptr;
+    QLabel*           m_statusSelection = nullptr;
 
     // ── Compare mode ──────────────────────────────────────────────────────────
     CompareView*      m_compareView     = nullptr;
@@ -199,4 +267,31 @@ private:
 
     // Preferences (UndoStack depth)
     int m_maxUndoDepth = 20;
+
+    // ── Magic Select / segmentation ───────────────────────────────────────────
+    std::vector<bool>  m_selectionMask;
+    QPoint             m_lastMagicSeed;
+    int                m_selectThreshold = 30;
+
+    QAction*  m_actMagicSelect      = nullptr;
+    QAction*  m_actExportSelection  = nullptr;
+    QSlider*  m_thresholdSlider     = nullptr;
+    QLabel*   m_thresholdLabel      = nullptr;
+    QAction*  m_thresholdAction     = nullptr;  // widget-action in toolbar
+
+    // ── Annotation layer ──────────────────────────────────────────────────────
+    std::unique_ptr<AnnotationLayer> m_annotLayer;
+    QAction*    m_actAnnotate        = nullptr;
+    QToolBar*   m_annotToolBar       = nullptr;  // secondary toolbar
+    QAction*    m_actAnnotUndo       = nullptr;
+    QAction*    m_actAnnotRedo       = nullptr;
+    QAction*    m_actAnnotColor      = nullptr;
+    QSpinBox*   m_annotLineWidthSpin = nullptr;
+    QSpinBox*   m_annotFontSizeSpin  = nullptr;
+    QActionGroup* m_annotToolGroup   = nullptr;
+    QAction*    m_actSaveWithAnnot   = nullptr;
+    QAction*    m_actSaveWithoutAnnot= nullptr;
+    QAction*    m_actSaveAnnotJson   = nullptr;
 };
+
+

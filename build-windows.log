@@ -1,0 +1,12 @@
+[  6%] Built target translations
+[  6%] Built target CImgViewer_autogen_timestamp_deps
+[ 10%] Automatic MOC and UIC for target CImgViewer
+[ 10%] Built target CImgViewer_autogen
+[ 24%] Building CXX object CMakeFiles/CImgViewer.dir/src/main.cpp.obj
+[ 24%] Building CXX object CMakeFiles/CImgViewer.dir/src/FileManager.cpp.obj
+[ 24%] Building CXX object CMakeFiles/CImgViewer.dir/CImgViewer_autogen/mocs_compilation.cpp.obj
+[ 24%] Building CXX object CMakeFiles/CImgViewer.dir/src/MainWindow.cpp.obj
+[ 27%] Building CXX object CMakeFiles/CImgViewer.dir/src/BatchExportDialog.cpp.obj
+[ 31%] Linking CXX executable CImgViewer.exe
+Copying onnxruntime.dll to build directory
+[100%] Built target CImgViewer
