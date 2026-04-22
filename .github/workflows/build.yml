@@ -9,60 +9,6 @@ on:
     types: [ created ]
 
 jobs:
-  build-linux:
-    name: Linux (Ubuntu)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Instalar dependências
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake build-essential \
-            qt6-base-dev qt6-tools-dev qt6-tools-dev-tools \
-            libqt6svg6-dev libgl1-mesa-dev \
-            libx11-dev
-
-      - name: Baixar CImg.h
-        run: |
-          mkdir -p third_party
-          curl -L https://github.com/GreycLab/CImg/raw/master/CImg.h \
-            -o third_party/CImg.h
-
-      - name: Baixar ONNX Runtime
-        run: |
-          mkdir -p third_party
-          wget -q https://github.com/microsoft/onnxruntime/releases/download/v1.17.1/onnxruntime-linux-x64-1.17.1.tgz
-          tar -xzf onnxruntime-linux-x64-1.17.1.tgz
-          mv onnxruntime-linux-x64-1.17.1 third_party/onnxruntime
-          ls third_party/onnxruntime/lib/
-
-      - name: Build
-        run: |
-          cmake -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DONNXRUNTIME_DIR=$PWD/third_party/onnxruntime
-          cmake --build build -j$(nproc)
-
-      - name: Empacotar
-        run: |
-          mkdir -p dist-linux
-          cp build/CImgViewer dist-linux/
-          cp third_party/onnxruntime/lib/libonnxruntime.so dist-linux/
-          cp -r build/translations dist-linux/ 2>/dev/null || true
-          echo '#!/bin/bash' > dist-linux/launch.sh
-          echo 'DIR="$(dirname "$(readlink -f "$0")")"' >> dist-linux/launch.sh
-          echo 'LD_LIBRARY_PATH="$DIR:$LD_LIBRARY_PATH" "$DIR/CImgViewer" "$@"' >> dist-linux/launch.sh
-          chmod +x dist-linux/launch.sh
-          tar -czf CImgViewer-linux-x64.tar.gz -C dist-linux .
-
-      - name: Upload artefato
-        uses: actions/upload-artifact@v4
-        with:
-          name: CImgViewer-linux-x64
-          path: CImgViewer-linux-x64.tar.gz
-
   build-windows:
     name: Windows (Cross-compile)
     runs-on: ubuntu-latest
@@ -164,7 +110,7 @@ jobs:
 
   release:
     name: Publicar Release
-    needs: [ build-linux, build-windows ]
+    needs: [ build-windows ]
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     steps:
@@ -174,5 +120,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            CImgViewer-linux-x64/CImgViewer-linux-x64.tar.gz
             CImgViewer-windows-x64/CImgViewer-windows-x64.zip
