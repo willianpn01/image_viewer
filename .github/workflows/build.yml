@@ -32,20 +32,29 @@ jobs:
 
       - name: Baixar ONNX Runtime
         run: |
+          mkdir -p third_party
           wget -q https://github.com/microsoft/onnxruntime/releases/download/v1.17.1/onnxruntime-linux-x64-1.17.1.tgz
           tar -xzf onnxruntime-linux-x64-1.17.1.tgz
           mv onnxruntime-linux-x64-1.17.1 third_party/onnxruntime
+          ls third_party/onnxruntime/lib/
 
       - name: Build
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DONNXRUNTIME_DIR=$PWD/third_party/onnxruntime
           cmake --build build -j$(nproc)
 
       - name: Empacotar
         run: |
           mkdir -p dist-linux
           cp build/CImgViewer dist-linux/
+          cp third_party/onnxruntime/lib/libonnxruntime.so dist-linux/
           cp -r build/translations dist-linux/ 2>/dev/null || true
+          echo '#!/bin/bash' > dist-linux/launch.sh
+          echo 'DIR="$(dirname "$(readlink -f "$0")")"' >> dist-linux/launch.sh
+          echo 'LD_LIBRARY_PATH="$DIR:$LD_LIBRARY_PATH" "$DIR/CImgViewer" "$@"' >> dist-linux/launch.sh
+          chmod +x dist-linux/launch.sh
           tar -czf CImgViewer-linux-x64.tar.gz -C dist-linux .
 
       - name: Upload artefato
